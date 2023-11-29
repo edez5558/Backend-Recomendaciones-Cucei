@@ -14,6 +14,7 @@ app.use(express.json());
 app.use('/api/estudiante',require('./routes/estudiante.js'));
 app.use('/api/review',require('./routes/review.js'))
 app.use('/api/usuario',require('./routes/usuario.js'));
+app.use('/api/docente',require('./routes/docente.js'));
 
 app.listen(app.get('port'), () => {
     console.log(`Server on port ${app.get('port')}`)

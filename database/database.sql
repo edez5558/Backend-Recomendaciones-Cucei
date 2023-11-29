@@ -3,7 +3,7 @@ CREATE DATABASE recomendacionescucei;
 CREATE TABLE usuario(
     codigo VARCHAR(9) NOT NULL PRIMARY KEY,
     nombre VARCHAR(200) NOT NULL,
-    password VARCHAR(50) NOT NULL,
+    password VARCHAR(100) BINARY NOT NULL,
     session VARCHAR(50)
 );
 
@@ -41,7 +41,8 @@ CREATE TABLE review(
     calificacion INTEGER,
     estudiante_codigo VARCHAR(9) REFERENCES usuario(codigo),
     comentario VARCHAR(400),
-    fecha DATE NOT NULL DEFAULT CURRENT_DATE
+    fecha DATE NOT NULL DEFAULT CURRENT_DATE,
+    escondido BOOLEAN NOT NULL DEFAULT false 
 );
 
 CREATE TABLE report(
@@ -51,6 +52,11 @@ CREATE TABLE report(
 DROP TABLE review;
 DROP TABLE docente_materia;
 DROP TABLE materia;
+
+SELECT m.departamento FROM docente_materia as dm
+    JOIN docente AS d ON d.id = dm.docente_id
+    JOIN materia AS m ON m.clave = dm.materia_id
+    WHERE d.nombre = 'GARCIA HERNANDEZ, MARTIN';
 
 INSERT INTO usuario (codigo,nombre,password) VALUES
     ('217555871','Gomez Alvarez Edmundo','password');
@@ -67,6 +73,11 @@ SELECT  m.nombre as materia, d.nombre as docente, r.calificacion as calificacion
     JOIN docente as d on r.docente_id = d.id
     JOIN materia as m on r.materia_id = m.clave
     WHERE d.id = (SELECT id FROM docente WHERE nombre = 'GARCIA HERNANDEZ, MARTIN');
+
+SELECT  m.nombre as materia, d.nombre as docente, r.calificacion as calificacion, r.comentario as comentario FROM review as r
+    LEFT JOIN docente as d on r.docente_id = d.id
+    LEFT JOIN materia as m on r.materia_id = m.clave
+    WHERE d.id = (SELECT id FROM docente WHERE nombre = 'MACIEL CASTILLO, OSCAR EDUARDO') AND r.escondido = false;
 
 INSERT INTO review(materia_id,docente_id,calificacion,estudiante_codigo,comentario) VALUES
     ();

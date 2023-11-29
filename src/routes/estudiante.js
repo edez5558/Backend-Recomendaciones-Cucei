@@ -6,7 +6,6 @@ const { getEstudiantes, createEstudiante, getEstudianteBySession, getReviewsByCo
 router.get('/get', getEstudiantes);
 router.post('/get',getEstudianteBySession);
 router.post('/create',createEstudiante)
-router.post('/review',getReviewsByCodigo);
 
 
 module.exports = router;

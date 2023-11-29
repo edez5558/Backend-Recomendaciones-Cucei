@@ -1,6 +1,7 @@
 const { Pool } = require('pg');
 const { config } = require('dotenv');
 const Crypto = require('crypto');
+const bcrypt = require('bcrypt');
 
 config();
 
@@ -34,7 +35,9 @@ const createSession = async (req,res) => {
     if(passdb == null)
         return;
 
-    if(password != passdb){
+    const isEqual = await bcrypt.compare(password,passdb);
+
+    if(!isEqual){
         res.status(401).json(`Datos invalidos`);
         return
     }
@@ -70,7 +73,6 @@ const verifySession = async (req,res) =>{
 }
 
 const createEstudiante = async (req,res) => {
-    console.log(process.env.DATABASE_URL);
     const { codigo, nombre, password, estado, ciclo, carrera } = req.body;
 
     const session_id = createRandomString();
@@ -81,7 +83,9 @@ const createEstudiante = async (req,res) => {
     const query_estudiante = "INSERT INTO estudiante(codigo,carrera,ciclo,estado) VALUES \
     ($1,$2,$3,$4)";
 
-    const id = await pool.query(query_usuario,[codigo,nombre,password,session_id]).then( response => {
+    const hash = await bcrypt.hash(password,5);
+
+    const id = await pool.query(query_usuario,[codigo,nombre,hash,session_id]).then( response => {
         return response.rows[0].codigo;
     }).catch( err => {
         console.log(err);
@@ -94,6 +98,7 @@ const createEstudiante = async (req,res) => {
         return;
     }
 
+
     await pool.query(query_estudiante,[codigo,carrera,ciclo,estado]).then( response => {
         res.status(200).json(session_id);
     }).catch( err => {
@@ -102,8 +107,35 @@ const createEstudiante = async (req,res) => {
     });
 }
 
+const updatePasswordFormat = async (req,res) => {
+    const query_request = "SELECT codigo, password FROM usuario";
+    const query_update  = "UPDATE usuario SET password = $1 WHERE codigo = $2";
+
+
+    const users = await pool.query(query_request).then( response => {
+        return response.rows;
+    }).catch( err => {
+        console.log(err);
+        res.status(501).json('Error');
+        return null;
+    });
+
+
+    if(users == null) return;
+
+
+    users.forEach(async element => {
+        const hash = await bcrypt.hash(element.password,5);
+        pool.query(query_update,[hash,element.codigo]);
+    });
+
+    res.status(200).json('ABC');
+
+}
+
 module.exports = {
     verifySession,
     createSession,
-    createEstudiante
+    createEstudiante,
+    updatePasswordFormat
 }

@@ -1,6 +1,7 @@
 const { Pool } = require('pg');
 const { config } = require('dotenv');
 const Crypto = require('crypto');
+const { getReports } = require('./review.controller');
 
 config();
 
@@ -31,41 +32,69 @@ const createEstudiante = async (req,res) => {
     res.send('estudiante created');
 }
 
+const isAdministrador = async (codigo) => {
+    const query = 'SELECT * FROM administrador WHERE codigo = $1';
+
+    return await pool.query(query,[codigo]).then( response => {
+        return response.rowCount > 0;
+    }).catch( err => {
+        console.log(err);
+        return false;
+    });
+}
+
 const getEstudianteBySession = async (req,res) => {
     const { session } = req.body;
 
     const query = "SELECT u.nombre AS nombre, u.codigo AS codigo, e.carrera AS carrera, e.ciclo AS ciclo, e.estado AS estado FROM usuario as u \
     JOIN estudiante AS e on u.codigo = e.codigo \
     WHERE u.session = $1"
-    await pool.query(query,[session]).then(response => {
-        console.log(response.rows);
-        res.status(200).json(response.rows[0]);
+    const estudiante = await pool.query(query,[session]).then(response => {
+        return response.rows[0];
     }).catch(err => {
         console.log(err);
-        res.status(501).json('Error');
+        return null;
     });
+
+    console.log(estudiante);
+    if(estudiante == null){
+        res.status(501).json('Error');
+        return;
+    }
+
+    const reviews = await getReviewsByCodigo(estudiante.codigo);
+
+    const response_info = {estudiante: estudiante, reviews : reviews};
+
+    if(! await isAdministrador(estudiante.codigo)){
+        res.status(200).json(response_info);
+        return;
+    }
+
+    const reports = await getReports();
+
+    const response_admin = {estudiante: estudiante, reviews: reviews, reports: reports};
+
+    res.status(200).json(response_admin);
 }
 
-const getReviewsByCodigo = async (req, res)=>{
-    const { codigo } = req.body;
-
-    const query = "SELECT d.nombre as docente, m.nombre as materia, r.calificacion as calificacion, \
+const getReviewsByCodigo = async (codigo)=>{
+    const query = "SELECT r.id as id,d.nombre as docente, m.nombre as materia, r.calificacion as calificacion, \
     r.comentario as comentario FROM review as r \
-    JOIN docente as d ON d.id = r.docente_id \
-    JOIN materia as m ON m.clave = r.materia_id \
-    WHERE r.estudiante_codigo = $1";
+    LEFT JOIN docente as d ON d.id = r.docente_id \
+    LEFT JOIN materia as m ON m.clave = r.materia_id \
+    WHERE r.estudiante_codigo = $1 AND r.escondido = false";
 
-    await pool.query(query,[codigo]).then(response => {
-        res.status(200).json(response.rows);
+    return await pool.query(query,[codigo]).then(response => {
+        return response.rows;
     }).catch( err => {
         console.log(err);
-        res.status(501).json('error');
+        return [];
     });
 }
 
 module.exports = {
     getEstudiantes,
     createEstudiante,
-    getEstudianteBySession,
-    getReviewsByCodigo
+    getEstudianteBySession
 }

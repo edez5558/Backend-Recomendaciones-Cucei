@@ -2,6 +2,7 @@ const { Pool } = require('pg');
 const { config } = require('dotenv')
 const axios = require('axios');
 const cheerio = require('cheerio');
+const { response } = require('express');
 
 config();
 
@@ -53,6 +54,8 @@ async function searchMateria(clave){
             const tempList = tempString.split('\n');
             departamento = tempList[tempList.length - 1];
         }
+
+        console.log(materia_name,departamento);
 
         return { materia_name, departamento};
     }).catch(err => {
@@ -124,9 +127,9 @@ async function docenteAddMateria(clave,id){
 
 
 const createReview = async (req,res) => {
-    const { clave, nombre, calificacion, session, comentario } = req.body;
+    let { clave , nombre, calificacion, session, comentario } = req.body;
 
-    console.log(req.body);
+    clave = clave.toUpperCase() || null;
 
     const codigo = await pool.query('SELECT codigo FROM usuario WHERE session = $1',[session]).then( response => {
         if(response.rowCount <= 0){
@@ -163,29 +166,49 @@ const createReview = async (req,res) => {
     const query = 'INSERT INTO review(materia_id,docente_id,calificacion,estudiante_codigo,comentario) VALUES \
                     ($1,$2,$3,$4,$5)';
 
+    const query_without = 'INSERT INTO review(docente_id,calificacion,estudiante_codigo,comentario) VALUES \
+                    ($1,$2,$3,$4)';
 
-    await pool.query(query,[clave,docente_id,calificacion,codigo,comentario]).then( response => {
+    const element_query = [clave,docente_id,calificacion,codigo,comentario];
+    const element_query_without = [docente_id,calificacion,codigo,comentario];
+
+    const final_query = (isMateriaAvailable && query) || query_without;
+    const final_element = (isMateriaAvailable && element_query) || element_query_without;
+    
+    await pool.query(final_query,final_element).then( response => {
         res.status(200).json(`Review creada correctamente`);
     }).catch( err => {
         console.log(err);
         res.status(501).json('Error al crear la review');
-    })
+    });
 }
 
-const getReviews = async (req,res) => {
-    const nombre = req.query.nombre;
-
+const getReviewsByDocenteName = async (nombre) => {
     const query = 'SELECT  r.id as id, m.nombre as materia, d.nombre as docente, r.calificacion as calificacion, r.comentario as comentario FROM review as r \
-    JOIN docente as d on r.docente_id = d.id \
-    JOIN materia as m on r.materia_id = m.clave \
-    WHERE d.id = (SELECT id FROM docente WHERE nombre = $1) '
+    LEFT JOIN docente as d on r.docente_id = d.id \
+    LEFT JOIN materia as m on r.materia_id = m.clave \
+    WHERE d.id = (SELECT id FROM docente WHERE nombre = $1) AND r.escondido = false';
 
-    await pool.query(query,[nombre]).then( response => {
-        res.status(200).json(response.rows);
+    return await pool.query(query,[nombre]).then( response => {
+        return response.rows;
     }).catch(err=>{
         console.log(err);
-        res.status(501).json('Error al obtener la review');
+        return [];
     });
+}
+
+const deleteReviews =  async (req,res) => {
+    const id = req.body.id;
+
+    const query = "UPDATE review set escondido = true WHERE id = $1"
+
+    pool.query(query,[id]).then( response => {
+    }).catch( err => {
+        console.log(err);
+    });
+
+    res.status(200).json('Shadow delete');
+    cancelReport(id);
 }
 
 const getDocenteWithReview = async (req,res) => {
@@ -205,8 +228,61 @@ const getDocenteWithReview = async (req,res) => {
     res.status(200).json(array);
 }
 
+const reportReview = async (req,res) => {
+    const { id } = req.body;
+
+    console.log(id);
+
+    const query = 'INSERT INTO report (review_id) VALUES ($1)';
+
+    pool.query(query,[id]).then( response => {
+        console.log(response.rows); 
+    }).catch( err => {
+        console.log(err);
+    });
+
+    res.status(200).json('Reporte hecho');
+}
+
+const cancelReport = async (id) => {
+    const query = 'DELETE FROM report WHERE review_id = $1';
+
+    console.log(`report cancel ${id}`);
+
+    pool.query(query,[id]).then( response => {
+    }).catch( err => {
+        console.log(err);
+    });
+}
+
+const setCancelReport = async (req,res) => {
+    const { id } = req.body;
+
+    cancelReport(id);
+
+    res.status(200).json('remover report');
+}
+
+const getReports = async () => {
+    const query = 'SELECT  r.id as id, m.nombre as materia, d.nombre as docente, r.calificacion as calificacion, r.comentario as comentario FROM review as r \
+    LEFT JOIN docente as d on r.docente_id = d.id \
+    LEFT JOIN materia as m on r.materia_id = m.clave \
+    WHERE r.id IN (SELECT review_id as id FROM report) AND r.escondido = false ';
+
+    return await pool.query(query).then(response => {
+        return response.rows;
+    }).catch( err => {
+        console.log(err);
+        res.status(501).json([]);
+    });
+}
+
 module.exports = {
-    getReviews,
+    getReviewsByDocenteName,
     createReview,
-    getDocenteWithReview
+    getDocenteWithReview,
+    deleteReviews,
+    reportReview,
+    setCancelReport,
+    getReports
 }
